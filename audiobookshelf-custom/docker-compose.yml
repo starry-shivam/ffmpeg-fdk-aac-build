@@ -1,0 +1,18 @@
+services:
+  audiobookshelf:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: abs-custom:latest
+    container_name: audiobookshelf
+    ports:
+      - "13378:80"
+    volumes:
+      - /media/audiobooks:/audiobooks
+      - ./data/metadata:/metadata
+      - ./data/config:/config
+    environment:
+      - AUDIOBOOKSHELF_UID=1000
+      - AUDIOBOOKSHELF_GID=1000
+      - TZ=Asia/Kolkata
+    restart: unless-stopped

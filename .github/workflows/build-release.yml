@@ -1,0 +1,124 @@
+name: Build FFmpeg Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      ffmpeg_version:
+        description: FFmpeg version to build
+        required: true
+        default: 8.1.1
+      release_tag:
+        description: Optional release tag. Auto-generated when empty.
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.vars.outputs.release_tag }}
+      release_name: ${{ steps.vars.outputs.release_name }}
+    steps:
+      - name: Resolve release metadata
+        id: vars
+        shell: bash
+        run: |
+          set -euo pipefail
+          FFMPEG_VERSION="${{ inputs.ffmpeg_version }}"
+          PROVIDED_TAG="${{ inputs.release_tag }}"
+
+          if [[ -n "$PROVIDED_TAG" ]]; then
+            TAG="$PROVIDED_TAG"
+          else
+            TAG="ffmpeg-v${FFMPEG_VERSION}-fdk-aac"
+          fi
+
+          echo "release_tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "release_name=FFmpeg ${FFMPEG_VERSION} + fdk-aac" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            platform_dir: linux-amd64
+          - platform: linux/arm64
+            platform_dir: linux-arm64
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ffmpeg and ffprobe for ${{ matrix.platform }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          PLATFORM_PAIR="${{ matrix.platform }}"
+          PLATFORM_DIR="${{ matrix.platform_dir }}"
+
+          mkdir -p "artifacts/${PLATFORM_DIR}" "dist"
+
+          docker buildx build \
+            --file Dockerfile.build \
+            --platform "${PLATFORM_PAIR}" \
+            --target artifacts \
+            --build-arg "FFMPEG_VERSION=${{ inputs.ffmpeg_version }}" \
+            --output "type=local,dest=artifacts/${PLATFORM_DIR}" \
+            .
+
+          chmod +x "artifacts/${PLATFORM_DIR}/out/ffmpeg" "artifacts/${PLATFORM_DIR}/out/ffprobe"
+          tar -C "artifacts/${PLATFORM_DIR}/out" -czf "dist/ffmpeg-${{ inputs.ffmpeg_version }}-${PLATFORM_DIR}.tar.gz" ffmpeg ffprobe
+
+      - name: Upload platform artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-${{ inputs.ffmpeg_version }}-${{ matrix.platform_dir }}
+          path: dist/*.tar.gz
+
+  release:
+    needs:
+      - prepare
+      - build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Prepare release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          find release-artifacts -type f -name '*.tar.gz' -exec cp {} dist/ \;
+          (cd dist && sha256sum *.tar.gz > SHA256SUMS)
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.release_tag }}
+          name: ${{ needs.prepare.outputs.release_name }}
+          body: |
+            Prebuilt static ffmpeg/ffprobe binaries with libfdk-aac enabled.
+
+            Build inputs:
+            - FFmpeg: ${{ inputs.ffmpeg_version }}
+            - fdk-aac source: https://github.com/starry-shivam/fdk-aac
+            - Platforms: linux/amd64, linux/arm64
+
+            Verify downloads with SHA256SUMS.
+          files: |
+            dist/*.tar.gz
+            dist/SHA256SUMS

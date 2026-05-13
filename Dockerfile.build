@@ -1,0 +1,80 @@
+ARG FFMPEG_VERSION=8.1.1
+
+FROM ubuntu:24.04 AS builder
+
+ARG FFMPEG_VERSION
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PREFIX=/usr/local/ffmpeg_build
+
+RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt/lists \
+    apt-get update && \
+    sed -i 's/^Components: .*/Components: main universe multiverse/' /etc/apt/sources.list.d/ubuntu.sources && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+      autoconf \
+      automake \
+      build-essential \
+      libbz2-dev \
+      ca-certificates \
+      git \
+      libmp3lame-dev \
+      libtool \
+      make \
+      nasm \
+      pkg-config \
+      tar \
+      wget \
+      yasm \
+      libwebp-dev \
+      zlib1g-dev \
+      xz-utils && \
+    rm -rf /var/lib/apt/lists/*
+
+# Build libfdk-aac statically.
+RUN git clone --depth 1 https://github.com/starry-shivam/fdk-aac /tmp/fdk-aac && \
+    cd /tmp/fdk-aac && \
+    autoreconf -fiv && \
+    ./configure --prefix="${PREFIX}" --disable-shared --enable-static && \
+    make -j"$(nproc)" && \
+    make install && \
+    rm -rf /tmp/fdk-aac
+
+# Build ffmpeg and ffprobe with libfdk-aac support.
+RUN cd /tmp && \
+    wget "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.bz2" && \
+    tar xjvf "ffmpeg-${FFMPEG_VERSION}.tar.bz2" && \
+    rm "ffmpeg-${FFMPEG_VERSION}.tar.bz2" && \
+    cd "ffmpeg-${FFMPEG_VERSION}" && \
+    export PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig:${PKG_CONFIG_PATH:-}" && \
+    ./configure \
+      --prefix="${PREFIX}" \
+      --pkg-config-flags="--static" \
+      --extra-cflags="-I${PREFIX}/include" \
+      --extra-ldflags="-L${PREFIX}/lib" \
+      --disable-shared \
+      --enable-static \
+      --disable-debug \
+      --disable-doc \
+      --enable-bzlib \
+      --enable-libmp3lame \
+      --enable-nonfree \
+      --enable-libfdk-aac \
+      --enable-decoder=libfdk_aac \
+      --enable-encoder=libfdk_aac \
+      --disable-encoder=aac \
+      --disable-encoder=aac_mf \
+      --disable-decoder=aac \
+      --disable-decoder=aac_fixed \
+      --disable-decoder=aac_latm \
+      --enable-zlib \
+      --enable-libwebp \
+      --extra-ldflags="-static -L${PREFIX}/lib" && \
+    make -j"$(nproc)" && \
+    install -D ffmpeg /out/ffmpeg && \
+    install -D ffprobe /out/ffprobe && \
+    strip /out/ffmpeg /out/ffprobe && \
+    rm -rf /tmp/ffmpeg* "${PREFIX}"
+
+FROM scratch AS artifacts
+COPY --from=builder /out/ /out/
