@@ -1,5 +1,4 @@
 ARG AUDIOBOOKSHELF_TAG=latest
-ARG FFMPEG_RELEASE_REPO=starry-shivam/ffmpeg-fdk-aac-build
 
 FROM ghcr.io/advplyr/audiobookshelf:${AUDIOBOOKSHELF_TAG}
 
