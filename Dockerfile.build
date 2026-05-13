@@ -1,8 +1,6 @@
-ARG FFMPEG_VERSION=8.1.1
-
 FROM ubuntu:24.04 AS builder
 
-ARG FFMPEG_VERSION
+ARG FFMPEG_VERSION # Supplied by github actions workflow.
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PREFIX=/usr/local/ffmpeg_build
