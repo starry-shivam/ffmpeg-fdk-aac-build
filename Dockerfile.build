@@ -17,6 +17,7 @@ RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/
       ca-certificates \
       git \
       libmp3lame-dev \
+      libopus-dev \
       libtool \
       make \
       nasm \
@@ -56,6 +57,7 @@ RUN cd /tmp && \
       --disable-doc \
       --enable-bzlib \
       --enable-libmp3lame \
+      --enable-libopus \
       --enable-nonfree \
       --enable-libfdk-aac \
       --enable-decoder=libfdk_aac \
