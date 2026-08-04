@@ -6,7 +6,7 @@ on:
       ffmpeg_version:
         description: FFmpeg version to build
         required: true
-        default: 8.1.1
+        default: 9.0
       release_tag:
         description: Optional release tag. Auto-generated when empty.
         required: false

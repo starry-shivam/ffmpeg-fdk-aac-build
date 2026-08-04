@@ -4,7 +4,7 @@ set -euo pipefail
 # Local helper to build tarballs for both linux/amd64 and linux/arm64.
 # Requirements: docker buildx + qemu configured.
 
-FFMPEG_VERSION="${1:-8.1.1}"
+FFMPEG_VERSION="${1:-9.0}"
 
 platforms=("linux/amd64" "linux/arm64")
 
